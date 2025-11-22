@@ -18,16 +18,13 @@ function getApiKey(): string {
   return GEMINI_API_KEY;
 }
 
-function buildPromptFromMessages(messages: ChatMessage[]): string {
-  const rolePrefix: Record<ChatMessage["role"], string> = {
-    system: "[system]",
-    user: "[user]",
-    assistant: "[assistant]",
-  };
-
-  return messages
-    .map((message) => `${rolePrefix[message.role]} ${message.content}`)
-    .join("\n\n");
+function buildPromptFromMessages(
+  messages: ChatMessage[],
+): Array<{ role: ChatMessage["role"]; parts: { text: string }[] }> {
+  return messages.map((message) => ({
+    role: message.role,
+    parts: [{ text: message.content }],
+  }));
 }
 
 export class GeminiClient implements LLMClient {
@@ -44,11 +41,11 @@ export class GeminiClient implements LLMClient {
       );
     }
 
-    const prompt = buildPromptFromMessages(req.messages);
+    const contents = buildPromptFromMessages(req.messages);
 
     const response = await this.ai.models.generateContent({
       model: req.model,
-      contents: prompt,
+      contents,
       config: {
         temperature: req.temperature,
         maxOutputTokens: req.maxTokens,
