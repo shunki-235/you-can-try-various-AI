@@ -20,11 +20,13 @@ function getApiKey(): string {
 
 function buildPromptFromMessages(
   messages: ChatMessage[],
-): Array<{ role: ChatMessage["role"]; parts: { text: string }[] }> {
-  return messages.map((message) => ({
-    role: message.role,
-    parts: [{ text: message.content }],
-  }));
+): Array<{ role: "user" | "model"; parts: { text: string }[] }> {
+  return messages
+    .filter((message) => message.role !== "system")
+    .map((message) => ({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: message.content }],
+    }));
 }
 
 export class GeminiClient implements LLMClient {
@@ -43,12 +45,27 @@ export class GeminiClient implements LLMClient {
 
     const contents = buildPromptFromMessages(req.messages);
 
+    const systemInstructionText = req.messages
+      .filter((message) => message.role === "system")
+      .map((message) => message.content)
+      .join("\n\n")
+      .trim();
+
+    const systemInstruction =
+      systemInstructionText.length > 0
+        ? {
+            role: "user",
+            parts: [{ text: systemInstructionText }],
+          }
+        : undefined;
+
     const response = await this.ai.models.generateContent({
       model: req.model,
       contents,
       config: {
         temperature: req.temperature,
         maxOutputTokens: req.maxTokens,
+        systemInstruction,
       },
     });
 
