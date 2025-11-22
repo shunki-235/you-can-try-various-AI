@@ -1,12 +1,30 @@
 'use client';
 
 import { useMemo, useState } from "react";
+import { Settings2, Trash2 } from "lucide-react";
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROVIDER_ID,
   PROVIDERS,
 } from "@/lib/llm/providers";
 import type { ChatProvider } from "@/types/llm";
+
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 export default function SettingsPage() {
   const [defaultProvider, setDefaultProvider] =
@@ -23,12 +41,13 @@ export default function SettingsPage() {
     [defaultProvider],
   );
 
-  const handleProviderChange = (next: ChatProvider) => {
-    setDefaultProvider(next);
+  const handleProviderChange = (next: string) => {
+    const nextProvider = next as ChatProvider;
+    setDefaultProvider(nextProvider);
     const modelsForNext =
-      PROVIDERS.find((p) => p.id === next)?.models ?? [];
+      PROVIDERS.find((p) => p.id === nextProvider)?.models ?? [];
     const fallback =
-      DEFAULT_MODEL_BY_PROVIDER[next] ?? modelsForNext.at(0)?.id ?? "";
+      DEFAULT_MODEL_BY_PROVIDER[nextProvider] ?? modelsForNext.at(0)?.id ?? "";
     setDefaultModel(fallback);
   };
 
@@ -41,95 +60,101 @@ export default function SettingsPage() {
     setLastActionMessage(
       "（モック）セッションデータをクリアしました。実装時に localStorage 等の削除処理を追加します。",
     );
+    setTimeout(() => setLastActionMessage(null), 3000);
   };
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-4">
-      <section className="space-y-2 rounded-lg border bg-background/60 p-4 shadow-sm">
-        <div className="space-y-1">
-          <h1 className="text-base font-semibold tracking-tight">設定</h1>
-          <p className="text-xs text-zinc-500">
-            チャット画面のデフォルトプロバイダやモデル、セッションデータの扱いを設定するためのモック画面です。
+    <div className="container mx-auto max-w-4xl p-6 space-y-8">
+      <div className="flex items-center gap-3 border-b pb-6">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+          <Settings2 className="h-6 w-6 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">設定</h1>
+          <p className="text-muted-foreground">
+            アプリケーションの動作やデータ管理に関する設定を行います
           </p>
         </div>
-      </section>
+      </div>
 
-      <section className="space-y-3 rounded-lg border bg-background/60 p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">デフォルトのプロバイダ / モデル</h2>
-        <p className="text-xs text-zinc-500">
-          新しいチャットセッション開始時に、どのプロバイダ・モデルを初期選択状態にするかを設定します。
-          （モックのため、現在は画面内の状態のみが変化します）
-        </p>
-        <div className="mt-2 grid gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="default-provider"
-              className="text-xs font-medium text-zinc-600 dark:text-zinc-300"
-            >
-              デフォルトプロバイダ
-            </label>
-            <select
-              id="default-provider"
-              className="h-9 rounded-md border bg-background px-2 text-xs outline-none ring-0 focus-visible:border-zinc-900 focus-visible:ring-1 focus-visible:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-visible:border-zinc-50 dark:focus-visible:ring-zinc-50"
-              value={defaultProvider}
-              onChange={(event) =>
-                handleProviderChange(event.target.value as ChatProvider)
-              }
-            >
-              {PROVIDERS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="default-model"
-              className="text-xs font-medium text-zinc-600 dark:text-zinc-300"
-            >
-              デフォルトモデル
-            </label>
-            <select
-              id="default-model"
-              className="h-9 rounded-md border bg-background px-2 text-xs outline-none ring-0 focus-visible:border-zinc-900 focus-visible:ring-1 focus-visible:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-visible:border-zinc-50 dark:focus-visible:ring-zinc-50"
-              value={defaultModel}
-              onChange={(event) => handleModelChange(event.target.value)}
-            >
-              {availableModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </section>
+      <div className="grid gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">デフォルト設定</CardTitle>
+            <CardDescription>
+              新しいチャットを開始する際の初期プロバイダとモデルを設定します。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-6 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="default-provider">デフォルトプロバイダ</Label>
+              <Select
+                value={defaultProvider}
+                onValueChange={handleProviderChange}
+              >
+                <SelectTrigger id="default-provider">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROVIDERS.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="default-model">デフォルトモデル</Label>
+              <Select value={defaultModel} onValueChange={handleModelChange}>
+                <SelectTrigger id="default-model">
+                  <SelectValue placeholder="Select model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableModels.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
-      <section className="space-y-3 rounded-lg border bg-background/60 p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">セッションデータの管理</h2>
-        <p className="text-xs text-zinc-500">
-          ブラウザローカルに保存した会話履歴を削除するためのアクションをここに配置します。
-          現時点ではモックのため、実際のデータ削除は行われません。
-        </p>
-        <button
-          type="button"
-          className="inline-flex h-9 items-center justify-center rounded-full bg-zinc-900 px-4 text-xs font-medium text-zinc-50 transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-400"
-          onClick={handleClearSessions}
-        >
-          セッションデータをクリア（モック）
-        </button>
-        <p
-          className="text-xs text-zinc-500"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          {lastActionMessage ??
-            "直近の操作メッセージがここに表示されます。"}
-        </p>
-      </section>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg text-destructive">危険なエリア</CardTitle>
+            <CardDescription>
+              取り返しのつかない操作が含まれますのでご注意ください。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col justify-between gap-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4 sm:flex-row sm:items-center">
+              <div className="space-y-1">
+                <h4 className="font-medium text-destructive">セッションデータの削除</h4>
+                <p className="text-sm text-muted-foreground">
+                  保存されているすべてのチャット履歴とセッション情報を削除します。
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleClearSessions}
+                className="shrink-0"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                データをクリア
+              </Button>
+            </div>
+            {lastActionMessage && (
+              <div className="rounded-md bg-muted px-4 py-3 text-sm text-foreground animate-in fade-in slide-in-from-top-2">
+                {lastActionMessage}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
-
-
