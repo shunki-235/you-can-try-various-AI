@@ -1,0 +1,9 @@
+# .coderabbit.yaml
+language: ja-JP  # または "ja"
+
+reviews:
+  profile: chill
+  high_level_summary: true
+  auto_review:
+    enabled: true
+    drafts: false
