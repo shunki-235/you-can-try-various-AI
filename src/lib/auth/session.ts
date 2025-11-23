@@ -98,7 +98,12 @@ async function verifyToken(token: string): Promise<boolean> {
     // 16進文字列をデコード
     const signatureBytes = fromHex(signatureHex);
 
-    return await crypto.subtle.verify("HMAC", key, signatureBytes, data);
+    return await crypto.subtle.verify(
+      "HMAC",
+      key,
+      signatureBytes as unknown as ArrayBuffer,
+      data
+    );
   } catch {
     // デコードエラーや検証エラーが発生した場合は無効なトークンとして扱う
     return false;
