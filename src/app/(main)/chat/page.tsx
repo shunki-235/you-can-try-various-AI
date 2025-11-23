@@ -31,10 +31,19 @@ import { Input } from "@/components/ui/input";
 
 type ChatRole = "user" | "assistant";
 
+/**
+ * UI レイヤーで扱うメッセージ1件分の形。
+ * バックエンドの ChatMessage に対応するが、フロント専用のフィールドを追加する場合はこちらに持たせる。
+ */
 interface UiMessage {
+  /** 一意なメッセージID（localStorage 保存にも利用） */
   id: string;
+  /** ユーザーかアシスタントかのみを区別（system はUIには出さない） */
   role: ChatRole;
+  /** テキスト本文 */
   content: string;
+  /** 画像生成LLMから返ってきた画像一覧（存在しない場合は undefined） */
+  images?: ChatMessage["images"];
 }
 
 interface StoredSession {
@@ -61,6 +70,22 @@ type StoredSettings = {
 
 const SETTINGS_STORAGE_KEY = "ycva:settings:v1";
 const SESSIONS_STORAGE_KEY = "ycva:sessions:v1";
+
+/**
+ * Gemini で「画像生成も行う」モデルの ID 一覧。
+ * これらが選択されている場合はストリーミング API ではなく
+ * 非ストリーミングの `/api/llm/chat` を使ってレスポンス全体（画像含む）を取得する。
+ */
+const GEMINI_IMAGE_MODEL_IDS = new Set<string>([
+  "gemini-3-pro-image-preview",
+  "gemini-2.5-flash-image",
+]);
+
+/**
+ * 指定されたプロバイダとモデルIDが「Gemini の画像対応モデル」かどうかを判定する。
+ */
+const isGeminiImageModel = (provider: ChatProvider, modelId: string): boolean =>
+  provider === "gemini" && GEMINI_IMAGE_MODEL_IDS.has(modelId);
 
 const INITIAL_ASSISTANT_MESSAGE: UiMessage = {
   id: "initial-assistant",
@@ -411,29 +436,189 @@ export default function ChatPage() {
 
     try {
       setIsStreaming(true);
+      // 画像対応モデルの場合はストリーミングではなく通常のチャットAPIを使う。
+      // そうでなければテキストのみストリーミングで逐次表示する。
+      const useStreaming =
+        provider === "gemini" && !isGeminiImageModel(provider, model);
 
-      const response = await fetch("/api/llm/chat/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          provider,
-          model,
-          messages: chatMessages,
-          temperature: temperatureToSend,
-          maxTokens: maxTokensToSend,
-        }),
-      });
+      if (useStreaming) {
+        const response = await fetch("/api/llm/chat/stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            provider,
+            model,
+            messages: chatMessages,
+            temperature: temperatureToSend,
+            maxTokens: maxTokensToSend,
+          }),
+        });
 
-      if (!response.ok || !response.body) {
-        const fallbackText = `ストリーミングAPI呼び出しに失敗しました（status: ${response.status}）。`;
+        if (!response.ok || !response.body) {
+          const fallbackText = `ストリーミングAPI呼び出しに失敗しました（status: ${response.status}）。`;
+          setMessages((prev) => {
+            const nextMessages = prev.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    content: fallbackText,
+                  }
+                : message,
+            );
+
+            if (activeSessionId) {
+              setSessions((prevSessions) => {
+                const now = Date.now();
+                const nextSessions = prevSessions.map((session) =>
+                  session.id === activeSessionId
+                    ? {
+                        ...session,
+                        messages: nextMessages,
+                        updatedAt: now,
+                      }
+                    : session,
+                );
+                saveSessionsToStorage(nextSessions);
+                return nextSessions;
+              });
+            }
+
+            return nextMessages;
+          });
+          setErrorMessage(fallbackText);
+          setLastDurationMs(Date.now() - startedAt);
+          setIsStreaming(false);
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let done = false;
+        let accumulated = "";
+
+        while (!done) {
+          const { value, done: doneReading } = await reader.read();
+          done = doneReading;
+
+          if (value) {
+            const chunkText = decoder.decode(value, { stream: !doneReading });
+            if (chunkText) {
+              accumulated += chunkText;
+              const current = accumulated;
+
+              setMessages((prev) => {
+                const nextMessages = prev.map((message) =>
+                  message.id === assistantId
+                    ? {
+                        ...message,
+                        content: current,
+                      }
+                    : message,
+                );
+
+                if (activeSessionId) {
+                  setSessions((prevSessions) => {
+                    const now = Date.now();
+                    const nextSessions = prevSessions.map((session) =>
+                      session.id === activeSessionId
+                        ? {
+                            ...session,
+                            messages: nextMessages,
+                            updatedAt: now,
+                          }
+                        : session,
+                    );
+                    saveSessionsToStorage(nextSessions);
+                    return nextSessions;
+                  });
+                }
+
+                return nextMessages;
+              });
+            }
+          }
+        }
+      } else {
+        // 画像生成時など、レスポンス全体（テキスト + 画像）を一括で受け取りたいケース。
+        const response = await fetch("/api/llm/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            provider,
+            model,
+            messages: chatMessages,
+            temperature: temperatureToSend,
+            maxTokens: maxTokensToSend,
+          }),
+        });
+
+        if (!response.ok) {
+          const fallbackText = `チャットAPI呼び出しに失敗しました（status: ${response.status}）。`;
+          setMessages((prev) => {
+            const nextMessages = prev.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    content: fallbackText,
+                  }
+                : message,
+            );
+
+            if (activeSessionId) {
+              setSessions((prevSessions) => {
+                const now = Date.now();
+                const nextSessions = prevSessions.map((session) =>
+                  session.id === activeSessionId
+                    ? {
+                        ...session,
+                        messages: nextMessages,
+                        updatedAt: now,
+                      }
+                    : session,
+                );
+                saveSessionsToStorage(nextSessions);
+                return nextSessions;
+              });
+            }
+
+            return nextMessages;
+          });
+          setErrorMessage(fallbackText);
+          setLastDurationMs(Date.now() - startedAt);
+          setIsStreaming(false);
+          return;
+        }
+
+        const json = (await response.json()) as {
+          message?: {
+            role?: ChatRole;
+            content?: string;
+            images?: ChatMessage["images"];
+          };
+          error?: string;
+        };
+
+        const nextContent =
+          typeof json.message?.content === "string"
+            ? json.message.content
+            : "";
+        const nextImages =
+          json.message?.images && Array.isArray(json.message.images)
+            ? json.message.images
+            : undefined;
+
+        // プレースホルダとして追加済みの assistantMessage を、確定したレスポンス内容に差し替える。
         setMessages((prev) => {
           const nextMessages = prev.map((message) =>
             message.id === assistantId
               ? {
                   ...message,
-                  content: fallbackText,
+                  content: nextContent,
+                  images: nextImages,
                 }
               : message,
           );
@@ -457,58 +642,6 @@ export default function ChatPage() {
 
           return nextMessages;
         });
-        setErrorMessage(fallbackText);
-        setLastDurationMs(Date.now() - startedAt);
-        setIsStreaming(false);
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let accumulated = "";
-
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-
-        if (value) {
-          const chunkText = decoder.decode(value, { stream: !doneReading });
-          if (chunkText) {
-            accumulated += chunkText;
-            const current = accumulated;
-
-            setMessages((prev) => {
-              const nextMessages = prev.map((message) =>
-                message.id === assistantId
-                  ? {
-                      ...message,
-                      content: current,
-                    }
-                  : message,
-              );
-
-              if (activeSessionId) {
-                setSessions((prevSessions) => {
-                  const now = Date.now();
-                  const nextSessions = prevSessions.map((session) =>
-                    session.id === activeSessionId
-                      ? {
-                          ...session,
-                          messages: nextMessages,
-                          updatedAt: now,
-                        }
-                      : session,
-                  );
-                  saveSessionsToStorage(nextSessions);
-                  return nextSessions;
-                });
-              }
-
-              return nextMessages;
-            });
-          }
-        }
       }
 
       setLastDurationMs(Date.now() - startedAt);
@@ -771,9 +904,27 @@ export default function ChatPage() {
                           : "bg-muted text-foreground rounded-tl-sm"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap break-words leading-relaxed">
-                        {message.content}
-                      </p>
+                      {message.content && (
+                        <p className="whitespace-pre-wrap break-words leading-relaxed">
+                          {message.content}
+                        </p>
+                      )}
+                      {message.images && message.images.length > 0 && (
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {message.images.map((image, index) => (
+                            <figure
+                              key={`${image.url}-${index.toString()}`}
+                              className="overflow-hidden rounded-lg border bg-background"
+                            >
+                              <img
+                                src={image.url}
+                                alt={image.alt ?? "生成された画像"}
+                                className="h-auto max-h-64 w-full bg-muted object-contain"
+                              />
+                            </figure>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
