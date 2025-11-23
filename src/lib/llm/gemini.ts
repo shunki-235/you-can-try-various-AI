@@ -29,14 +29,18 @@ function buildPromptFromMessages(
     }));
 }
 
-function buildSystemInstruction(messages: ChatMessage[]): string | undefined {
+function buildSystemInstruction(
+  messages: ChatMessage[],
+): { role: "system"; parts: [{ text: string }] } | undefined {
   const systemInstructionText = messages
     .filter((message) => message.role === "system")
     .map((message) => message.content)
     .join("\n\n")
     .trim();
 
-  return systemInstructionText.length > 0 ? systemInstructionText : undefined;
+  return systemInstructionText.length > 0
+    ? { role: "system", parts: [{ text: systemInstructionText }] }
+    : undefined;
 }
 
 export class GeminiClient implements LLMClient {
