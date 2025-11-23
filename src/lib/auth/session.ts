@@ -10,7 +10,13 @@ const SESSION_MAX_AGE_MS = 60 * 60 * 12 * 1000;
  * 署名キーを取得（環境変数から、なければAPP_PASSWORDを使用）
  */
 async function getSigningKey(): Promise<CryptoKey> {
-  const secret = process.env.SESSION_SECRET || process.env.APP_PASSWORD || "default-secret";
+  const secret = process.env.SESSION_SECRET || process.env.APP_PASSWORD;
+  
+  if (!secret) {
+    throw new Error(
+      "SESSION_SECRET or APP_PASSWORD environment variable is required for secure session management"
+    );
+  }
 
   // Web Crypto APIでHMACキーを生成
   const encoder = new TextEncoder();
