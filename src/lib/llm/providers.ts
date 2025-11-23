@@ -31,6 +31,14 @@ export const PROVIDERS: ProviderOption[] = [
       },
       { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro（高性能）" },
       {
+        id: "gemini-3-pro-preview",
+        label: "Gemini 3 Pro Preview（最新・高性能・マルチモーダル/プレビュー）",
+      },
+      {
+        id: "gemini-3-pro-image-preview",
+        label: "Gemini 3 Pro Image Preview（画像マルチモーダル・プレビュー）",
+      },
+      {
         id: "gemini-2.5-flash-image",
         label: "Gemini 2.5 Flash Image（画像/Nano Banana）",
       },
@@ -53,7 +61,7 @@ export const DEFAULT_PROVIDER_ID: ChatProvider = "gemini";
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<ChatProvider, string> = {
   openai: "gpt-5-mini",
-  gemini: "gemini-2.5-flash",
+  gemini: "gemini-3-pro-preview",
   claude: "claude-sonnet-4-5",
 };
 

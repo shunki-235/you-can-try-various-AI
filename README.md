@@ -183,6 +183,11 @@ pnpm dev
 
 - **統一インターフェース**: `src/lib/llm/clients.ts` でプロバイダ切り替え
 - **実装済みプロバイダ**: Gemini（`src/lib/llm/gemini.ts`）
+- **サポートしている Gemini モデル（2025-11 現在）**:
+  - デフォルト: `gemini-3-pro-preview`（Gemini 3 Pro Preview。高性能なマルチモーダルモデルのプレビュー版）
+  - 画像向け: `gemini-3-pro-image-preview`（Gemini 3 Pro Image Preview。画像マルチモーダル向けプレビュー版／このアプリからはテキスト入力のみ送信）
+  - 互換性維持のために `gemini-2.5-flash` / `gemini-2.5-pro` / `gemini-2.5-flash-image` も選択可能
+  - 各モデルの詳細スペックは公式ドキュメントの [Gemini モデル一覧](https://ai.google.dev/gemini-api/docs/models?hl=ja#gemini-3-pro) を参照してください
 - **拡張可能**: 新しいプロバイダは `LLMClient` インターフェースを実装
 
 ### API エンドポイント
