@@ -11,7 +11,7 @@ const SESSION_MAX_AGE_MS = 60 * 60 * 12 * 1000;
  */
 async function getSigningKey(): Promise<CryptoKey> {
   const secret = process.env.SESSION_SECRET || process.env.APP_PASSWORD;
-  
+
   if (!secret) {
     throw new Error(
       "SESSION_SECRET or APP_PASSWORD environment variable is required for secure session management"
@@ -32,68 +32,37 @@ async function getSigningKey(): Promise<CryptoKey> {
 }
 
 /**
- * Base64URLエンコード（Edge Runtime & Node.js 対応）
+ * ArrayBuffer / Uint8Array を 16進文字列に変換（Edge / Node 両対応）
  */
-function base64UrlEncode(bytes: ArrayBuffer): string {
-  const uint8Array = new Uint8Array(bytes);
-
-  // ブラウザ / Edge Runtime: btoa が利用可能な場合
-  if (typeof btoa === "function") {
-    let binary = "";
-    for (let i = 0; i < uint8Array.length; i++) {
-      binary += String.fromCharCode(uint8Array[i]);
-    }
-    return btoa(binary)
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=/g, "");
+function toHex(bytes: ArrayBuffer | Uint8Array): string {
+  const array = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
+  let hex = "";
+  for (let i = 0; i < array.length; i++) {
+    hex += array[i].toString(16).padStart(2, "0");
   }
-
-  // Node.js: Buffer が利用可能な場合
-  if (typeof Buffer !== "undefined") {
-    const base64 = Buffer.from(uint8Array).toString("base64");
-    return base64
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=/g, "");
-  }
-
-  // どちらも利用できない環境は想定外
-  throw new Error("No base64 encoder available");
+  return hex;
 }
 
 /**
- * Base64URLデコード（Edge Runtime & Node.js 対応）
+ * 16進文字列を Uint8Array に変換（Edge / Node 両対応）
  */
-function base64UrlDecode(base64: string): ArrayBuffer {
-  const base64Normalized = base64.replace(/-/g, "+").replace(/_/g, "/");
-  // Base64URLでは '=' パディングが削除されるため、復元が必要
-  const paddingLength = (4 - (base64Normalized.length % 4)) % 4;
-  const base64WithPadding = base64Normalized + "=".repeat(paddingLength);
+function fromHex(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0) {
+    throw new Error("Invalid hex string");
+  }
 
-  // ブラウザ / Edge Runtime: atob が利用可能な場合
-  if (typeof atob === "function") {
-    const binary = atob(base64WithPadding);
-    const buffer = new ArrayBuffer(binary.length);
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
+  const length = hex.length / 2;
+  const bytes = new Uint8Array(length);
+
+  for (let i = 0; i < length; i++) {
+    const byte = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    if (Number.isNaN(byte)) {
+      throw new Error("Invalid hex string");
     }
-    return buffer;
+    bytes[i] = byte;
   }
 
-  // Node.js: Buffer が利用可能な場合
-  if (typeof Buffer !== "undefined") {
-    const buf = Buffer.from(base64WithPadding, "base64");
-    const arrayBuffer = buf.buffer.slice(
-      buf.byteOffset,
-      buf.byteOffset + buf.byteLength
-    );
-    return arrayBuffer;
-  }
-
-  // どちらも利用できない環境は想定外
-  throw new Error("No base64 decoder available");
+  return bytes;
 }
 
 /**
@@ -105,10 +74,10 @@ async function signToken(payload: string): Promise<string> {
   const data = encoder.encode(payload);
   const signature = await crypto.subtle.sign("HMAC", key, data);
 
-  // Base64URLエンコード（URL-safe）
-  const signatureBase64 = base64UrlEncode(signature);
+  // URL-safe な 16進文字列として署名をエンコード
+  const signatureHex = toHex(signature);
 
-  return `${payload}.${signatureBase64}`;
+  return `${payload}.${signatureHex}`;
 }
 
 /**
@@ -121,13 +90,13 @@ async function verifyToken(token: string): Promise<boolean> {
       return false;
     }
 
-    const [payload, signature] = parts;
+    const [payload, signatureHex] = parts;
     const key = await getSigningKey();
     const encoder = new TextEncoder();
     const data = encoder.encode(payload);
 
-    // Base64URLデコード
-    const signatureBytes = base64UrlDecode(signature);
+    // 16進文字列をデコード
+    const signatureBytes = fromHex(signatureHex);
 
     return await crypto.subtle.verify("HMAC", key, signatureBytes, data);
   } catch {
