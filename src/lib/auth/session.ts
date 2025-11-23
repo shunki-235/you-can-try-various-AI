@@ -51,6 +51,11 @@ function fromHex(hex: string): Uint8Array {
     throw new Error("Invalid hex string");
   }
 
+  // 16進数以外の文字が含まれていないか事前に検証
+  if (!/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new Error("Invalid hex string");
+  }
+
   const length = hex.length / 2;
   const bytes = new Uint8Array(length);
 
