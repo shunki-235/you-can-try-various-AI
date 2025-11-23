@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 import type {
+  ChatImage,
   ChatMessage,
   ChatRequest,
   ChatResponse,
@@ -18,6 +19,11 @@ function getApiKey(): string {
   return GEMINI_API_KEY;
 }
 
+/**
+ * ChatMessage の配列から、Gemini SDK が受け取れる
+ * `contents` フォーマットへ変換するユーティリティ。
+ * - system ロールは除外し、user / assistant のみを user/model にマッピングする。
+ */
 function buildPromptFromMessages(
   messages: ChatMessage[],
 ): Array<{ role: "user" | "model"; parts: { text: string }[] }> {
@@ -29,6 +35,10 @@ function buildPromptFromMessages(
     }));
 }
 
+/**
+ * メッセージ一覧から system ロールのみを抜き出し、
+ * Gemini の systemInstruction 用テキストを生成する。
+ */
 function buildSystemInstruction(
   messages: ChatMessage[],
 ): { role: "system"; parts: [{ text: string }] } | undefined {
@@ -43,6 +53,101 @@ function buildSystemInstruction(
     : undefined;
 }
 
+/**
+ * Gemini の generateContent レスポンスから、
+ * - テキスト
+ * - 画像（inlineData / fileData）
+ * を安全に取り出して ChatImage[] として返す。
+ *
+ * SDK の型を直接参照せず、unknown から最低限必要な情報だけを抜き出すことで
+ * 依存をゆるめている。
+ */
+function extractImagesFromGeminiResponse(
+  response: unknown,
+): { text: string; images: ChatImage[] } {
+  const images: ChatImage[] = [];
+  let text = "";
+
+  if (!response || typeof response !== "object") {
+    return { text, images };
+  }
+
+  const r = response as {
+    text?: string;
+    candidates?: unknown;
+  };
+
+  if (typeof r.text === "string" && r.text.length > 0) {
+    text = r.text;
+  }
+
+  if (Array.isArray(r.candidates)) {
+    for (const candidate of r.candidates) {
+      if (!candidate || typeof candidate !== "object") continue;
+      const c = candidate as { content?: unknown };
+      const content = c.content;
+      if (!content || typeof content !== "object") continue;
+      const cc = content as { parts?: unknown };
+      if (!Array.isArray(cc.parts)) continue;
+
+      for (const part of cc.parts) {
+        if (!part || typeof part !== "object") continue;
+        const p = part as {
+          text?: unknown;
+          inlineData?: unknown;
+          fileData?: unknown;
+        };
+
+        if (typeof p.text === "string" && text.length === 0) {
+          text = p.text;
+        }
+
+        if (p.inlineData && typeof p.inlineData === "object") {
+          const inline = p.inlineData as {
+            data?: unknown;
+            mimeType?: unknown;
+          };
+          const data =
+            typeof inline.data === "string" ? inline.data : undefined;
+          const mimeType =
+            typeof inline.mimeType === "string"
+              ? inline.mimeType
+              : "image/png";
+
+          if (data) {
+            images.push({
+              url: `data:${mimeType};base64,${data}`,
+              alt: "Generated image",
+            });
+          }
+        }
+
+        if (p.fileData && typeof p.fileData === "object") {
+          const file = p.fileData as {
+            uri?: unknown;
+            mimeType?: unknown;
+          };
+          const uri = typeof file.uri === "string" ? file.uri : undefined;
+
+          if (uri) {
+            images.push({
+              url: uri,
+              alt: "Generated image",
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return { text, images };
+}
+
+/**
+ * Gemini 用の LLM クライアント実装。
+ * - chat(): テキスト + 画像を含む ChatResponse を返す
+ * - 内部で GoogleGenAI SDK を利用する
+ */
 export class GeminiClient implements LLMClient {
   private readonly ai: GoogleGenAI;
 
@@ -73,10 +178,16 @@ export class GeminiClient implements LLMClient {
 
       const totalTokens = response.usageMetadata?.totalTokenCount;
 
+      // 画像対応:
+      // - 既存の response.text だけでなく candidates からもテキスト・画像を抽出する
+      const { text, images } = extractImagesFromGeminiResponse(response);
+      const content = text.length > 0 ? text : response.text ?? "";
+
       return {
         message: {
           role: "assistant",
-          content: response.text ?? "",
+          content,
+          images: images.length > 0 ? images : undefined,
         },
         usage:
           typeof totalTokens === "number"
