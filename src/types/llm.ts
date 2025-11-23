@@ -24,4 +24,8 @@ export interface ChatResponse {
   usage?: ChatUsage;
 }
 
+export interface LLMClient {
+  chat(req: ChatRequest): Promise<ChatResponse>;
+}
+
 
