@@ -596,11 +596,18 @@ export default function ChatPage() {
             {sessions.map((session) => {
               const isActive = session.id === activeSessionId;
               return (
-                <button
+                <div
                   key={session.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleSelectSession(session.id)}
-                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition ${
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleSelectSession(session.id);
+                    }
+                  }}
+                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition cursor-pointer ${
                     isActive
                       ? "bg-primary text-primary-foreground"
                       : "hover:bg-muted"
@@ -620,7 +627,7 @@ export default function ChatPage() {
                   >
                     ×
                   </button>
-                </button>
+                </div>
               );
             })}
           </div>
