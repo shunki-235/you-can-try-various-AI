@@ -96,9 +96,3 @@ export async function POST(req: Request): Promise<Response> {
   }
 }
 
-// テスト用にエクスポート（validation ヘルパーを公開）
-export const __testUtils = {
-  isChatRequest,
-};
-
-

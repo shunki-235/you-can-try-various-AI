@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ChatRequest } from "@/types/llm";
-import { POST, __testUtils } from "@/app/api/llm/chat/route";
+import { POST } from "@/app/api/llm/chat/route";
+import { isChatRequest } from "@/app/api/llm/chat/validation";
 
 vi.mock("@/lib/llm/clients", () => {
   return {
@@ -38,7 +39,6 @@ vi.mock("@/lib/llm/clients", () => {
 describe("api/llm/chat route", () => {
   describe("validation helpers", () => {
     it("rejects invalid chat request", () => {
-      const { isChatRequest } = __testUtils;
 
       expect(isChatRequest(null)).toBe(false);
       expect(isChatRequest({})).toBe(false);
@@ -52,7 +52,6 @@ describe("api/llm/chat route", () => {
     });
 
     it("accepts valid chat request", () => {
-      const { isChatRequest } = __testUtils;
 
       const valid: ChatRequest = {
         provider: "gemini",
