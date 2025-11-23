@@ -14,7 +14,7 @@ export interface ProviderOption {
 export const PROVIDERS: ProviderOption[] = [
   {
     id: "openai",
-    label: "OpenAI",
+    label: "OpenAI（実装中）",
     models: [
       { id: "gpt-5.1", label: "GPT-5.1" },
       { id: "gpt-5-mini", label: "GPT-5-mini" },
@@ -38,7 +38,7 @@ export const PROVIDERS: ProviderOption[] = [
   },
   {
     id: "claude",
-    label: "Claude",
+    label: "Claude（実装中）",
     models: [
       { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5（推奨）" },
       {
@@ -49,7 +49,7 @@ export const PROVIDERS: ProviderOption[] = [
   },
 ];
 
-export const DEFAULT_PROVIDER_ID: ChatProvider = "openai";
+export const DEFAULT_PROVIDER_ID: ChatProvider = "gemini";
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<ChatProvider, string> = {
   openai: "gpt-5-mini",

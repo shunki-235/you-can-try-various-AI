@@ -315,7 +315,7 @@ export const config = {
 
 1. Next.js プロジェクト初期化（または既存プロジェクト構成の確定）
 2. 共通型定義・LLMクライアントインターフェース定義
-3. OpenAI / Gemini / Claude 向けアダプタの最小実装
+3. Gemini 向けアダプタの最小実装（※OpenAI / Claude 向けアダプタはポストリリースで追加実装）
 4. `POST /api/llm/chat` Route Handler 実装（非ストリーミング）
 5. チャット画面・設定画面のUI実装
 6. 共通パスワード＋middlewareによる認証・アクセス制御の実装
