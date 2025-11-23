@@ -1,62 +1,8 @@
 import { NextResponse } from "next/server";
 
-import type { ChatMessage, ChatRequest } from "@/types/llm";
+import type { ChatRequest } from "@/types/llm";
 import { getLLMClient, UnsupportedProviderError } from "@/lib/llm/clients";
-
-function isChatMessage(value: unknown): value is ChatMessage {
-  if (!value || typeof value !== "object") return false;
-
-  const v = value as { role?: unknown; content?: unknown };
-
-  const validRoles = ["system", "user", "assistant"] as const;
-
-  return (
-    typeof v.content === "string" &&
-    validRoles.includes(v.role as (typeof validRoles)[number])
-  );
-}
-
-function isChatRequest(value: unknown): value is ChatRequest {
-  if (!value || typeof value !== "object") return false;
-
-  const v = value as {
-    provider?: unknown;
-    model?: unknown;
-    messages?: unknown;
-    temperature?: unknown;
-    maxTokens?: unknown;
-  };
-
-  const validProviders = ["openai", "gemini", "claude"] as const;
-
-  if (!validProviders.includes(v.provider as (typeof validProviders)[number])) {
-    return false;
-  }
-
-  if (typeof v.model !== "string") {
-    return false;
-  }
-
-  if (!Array.isArray(v.messages) || v.messages.some((m) => !isChatMessage(m))) {
-    return false;
-  }
-
-  if (
-    typeof v.temperature !== "undefined" &&
-    typeof v.temperature !== "number"
-  ) {
-    return false;
-  }
-
-  if (
-    typeof v.maxTokens !== "undefined" &&
-    typeof v.maxTokens !== "number"
-  ) {
-    return false;
-  }
-
-  return true;
-}
+import { isChatRequest } from "@/app/api/llm/chat/validation";
 
 export async function POST(req: Request): Promise<Response> {
   let json: unknown;
@@ -150,9 +96,8 @@ export async function POST(req: Request): Promise<Response> {
   }
 }
 
-// テスト用にエクスポート
+// テスト用にエクスポート（validation ヘルパーを公開）
 export const __testUtils = {
-  isChatMessage,
   isChatRequest,
 };
 

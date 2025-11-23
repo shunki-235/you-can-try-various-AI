@@ -29,6 +29,20 @@ function buildPromptFromMessages(
     }));
 }
 
+function buildSystemInstruction(
+  messages: ChatMessage[],
+): { role: "system"; parts: [{ text: string }] } | undefined {
+  const systemInstructionText = messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n")
+    .trim();
+
+  return systemInstructionText.length > 0
+    ? { role: "system", parts: [{ text: systemInstructionText }] }
+    : undefined;
+}
+
 export class GeminiClient implements LLMClient {
   private readonly ai: GoogleGenAI;
 
@@ -44,15 +58,7 @@ export class GeminiClient implements LLMClient {
     }
 
     const contents = buildPromptFromMessages(req.messages);
-
-    const systemInstructionText = req.messages
-      .filter((message) => message.role === "system")
-      .map((message) => message.content)
-      .join("\n\n")
-      .trim();
-
-    const systemInstruction =
-      systemInstructionText.length > 0 ? systemInstructionText : undefined;
+    const systemInstruction = buildSystemInstruction(req.messages);
 
     try {
       const response = await this.ai.models.generateContent({
@@ -95,5 +101,48 @@ export function getGeminiClient(): GeminiClient {
   }
   return sharedClient;
 }
+
+/**
+ * Gemini のストリーミングレスポンスをテキストチャンクとして返すヘルパー。
+ * 各チャンクはそのままクライアントにストリーム転送できる前提で設計する。
+ */
+export async function* streamGeminiChat(
+  req: ChatRequest,
+): AsyncGenerator<string, void, unknown> {
+  if (req.provider !== "gemini") {
+    throw new Error(
+      `streamGeminiChat can only handle provider "gemini" (received: "${req.provider}")`,
+    );
+  }
+
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+
+  const contents = buildPromptFromMessages(req.messages);
+  const systemInstruction = buildSystemInstruction(req.messages);
+
+  try {
+    const response = await ai.models.generateContentStream({
+      model: req.model,
+      contents,
+      config: {
+        temperature: req.temperature,
+        maxOutputTokens: req.maxTokens,
+        systemInstruction,
+      },
+    });
+
+    for await (const chunk of response) {
+      const text = chunk.text ?? "";
+      if (text.length > 0) {
+        yield text;
+      }
+    }
+  } catch (error) {
+    throw new Error(
+      `Gemini streaming API request failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 
 
