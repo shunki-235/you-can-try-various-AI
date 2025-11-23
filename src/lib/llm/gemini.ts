@@ -52,12 +52,7 @@ export class GeminiClient implements LLMClient {
       .trim();
 
     const systemInstruction =
-      systemInstructionText.length > 0
-        ? {
-            role: "user",
-            parts: [{ text: systemInstructionText }],
-          }
-        : undefined;
+      systemInstructionText.length > 0 ? systemInstructionText : undefined;
 
     const response = await this.ai.models.generateContent({
       model: req.model,
