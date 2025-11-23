@@ -17,6 +17,7 @@ function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    // 画面遷移はすべてこの関数内で完結させる
     event.preventDefault();
     setError(null);
 
@@ -42,7 +43,13 @@ function LoginForm() {
         return;
       }
 
-      const from = searchParams.get("from") || "/chat";
+      // ミドルウェアから渡されたリダイレクト元パスを解釈
+      // ルート("/") から来た場合でも、常にチャット画面へ遷移させたいので
+      // "/" は "/chat" に正規化する
+      const rawFrom = searchParams.get("from");
+      const from =
+        !rawFrom || rawFrom === "/" ? "/chat" : rawFrom;
+
       router.replace(from);
       router.refresh();
     } catch {
