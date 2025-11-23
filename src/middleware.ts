@@ -18,7 +18,13 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   // 認証保護したいパスのみを明示的に指定
-  matcher: ["/", "/chat", "/settings/:path*"],
+  matcher: [
+    "/",
+    "/chat",
+    "/settings/:path*",
+    "/api/llm/chat/:path*",
+    "/api/llm/health/:path*",
+  ],
 };
 
 
