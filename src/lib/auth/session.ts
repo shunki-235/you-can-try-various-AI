@@ -26,35 +26,68 @@ async function getSigningKey(): Promise<CryptoKey> {
 }
 
 /**
- * Base64URLエンコード（Edge Runtime対応）
+ * Base64URLエンコード（Edge Runtime & Node.js 対応）
  */
 function base64UrlEncode(bytes: ArrayBuffer): string {
   const uint8Array = new Uint8Array(bytes);
-  let binary = "";
-  for (let i = 0; i < uint8Array.length; i++) {
-    binary += String.fromCharCode(uint8Array[i]);
+
+  // ブラウザ / Edge Runtime: btoa が利用可能な場合
+  if (typeof btoa === "function") {
+    let binary = "";
+    for (let i = 0; i < uint8Array.length; i++) {
+      binary += String.fromCharCode(uint8Array[i]);
+    }
+    return btoa(binary)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
   }
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
+
+  // Node.js: Buffer が利用可能な場合
+  if (typeof Buffer !== "undefined") {
+    const base64 = Buffer.from(uint8Array).toString("base64");
+    return base64
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
+  }
+
+  // どちらも利用できない環境は想定外
+  throw new Error("No base64 encoder available");
 }
 
 /**
- * Base64URLデコード（Edge Runtime対応）
+ * Base64URLデコード（Edge Runtime & Node.js 対応）
  */
 function base64UrlDecode(base64: string): ArrayBuffer {
   const base64Normalized = base64.replace(/-/g, "+").replace(/_/g, "/");
   // Base64URLでは '=' パディングが削除されるため、復元が必要
   const paddingLength = (4 - (base64Normalized.length % 4)) % 4;
   const base64WithPadding = base64Normalized + "=".repeat(paddingLength);
-  const binary = atob(base64WithPadding);
-  const buffer = new ArrayBuffer(binary.length);
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+
+  // ブラウザ / Edge Runtime: atob が利用可能な場合
+  if (typeof atob === "function") {
+    const binary = atob(base64WithPadding);
+    const buffer = new ArrayBuffer(binary.length);
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return buffer;
   }
-  return buffer;
+
+  // Node.js: Buffer が利用可能な場合
+  if (typeof Buffer !== "undefined") {
+    const buf = Buffer.from(base64WithPadding, "base64");
+    const arrayBuffer = buf.buffer.slice(
+      buf.byteOffset,
+      buf.byteOffset + buf.byteLength
+    );
+    return arrayBuffer;
+  }
+
+  // どちらも利用できない環境は想定外
+  throw new Error("No base64 decoder available");
 }
 
 /**
