@@ -54,30 +54,36 @@ export class GeminiClient implements LLMClient {
     const systemInstruction =
       systemInstructionText.length > 0 ? systemInstructionText : undefined;
 
-    const response = await this.ai.models.generateContent({
-      model: req.model,
-      contents,
-      config: {
-        temperature: req.temperature,
-        maxOutputTokens: req.maxTokens,
-        systemInstruction,
-      },
-    });
+    try {
+      const response = await this.ai.models.generateContent({
+        model: req.model,
+        contents,
+        config: {
+          temperature: req.temperature,
+          maxOutputTokens: req.maxTokens,
+          systemInstruction,
+        },
+      });
 
-    const totalTokens = response.usageMetadata?.totalTokenCount;
+      const totalTokens = response.usageMetadata?.totalTokenCount;
 
-    return {
-      message: {
-        role: "assistant",
-        content: response.text ?? "",
-      },
-      usage:
-        typeof totalTokens === "number"
-          ? {
-              totalTokens,
-            }
-          : undefined,
-    };
+      return {
+        message: {
+          role: "assistant",
+          content: response.text ?? "",
+        },
+        usage:
+          typeof totalTokens === "number"
+            ? {
+                totalTokens,
+              }
+            : undefined,
+      };
+    } catch (error) {
+      throw new Error(
+        `Gemini API request failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }
 
