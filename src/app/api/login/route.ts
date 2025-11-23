@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { timingSafeEqual } from "crypto";
+import { createSession } from "@/lib/auth/session";
 
 export async function POST(req: NextRequest) {
   const { password } = (await req.json().catch(() => ({}))) as {
@@ -32,7 +33,10 @@ export async function POST(req: NextRequest) {
 
   const response = NextResponse.json({ ok: true });
 
-  response.cookies.set("app_auth", appPassword, {
+  // ランダムなセッショントークンを生成（署名付き）
+  const sessionToken = await createSession();
+
+  response.cookies.set("app_auth", sessionToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

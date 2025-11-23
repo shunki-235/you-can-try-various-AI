@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isValidSession } from "@/lib/auth/session";
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const token = req.cookies.get("app_auth")?.value;
-  const appPassword = process.env.APP_PASSWORD;
 
-  // APP_PASSWORD が未設定、またはクッキーが一致しない場合はログインページへ
-  if (!token || !appPassword || token !== appPassword) {
+  // セッショントークンが有効でない場合はログインページへ
+  if (!(await isValidSession(token))) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
