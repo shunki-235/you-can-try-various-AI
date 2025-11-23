@@ -144,5 +144,43 @@ export async function* streamGeminiChat(
   }
 }
 
+export async function checkGeminiHealth(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  try {
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: "ping" }],
+        },
+      ],
+      config: {
+        maxOutputTokens: 1,
+      },
+    });
+
+    if (!response) {
+      return {
+        ok: false,
+        error: "Empty response from Gemini",
+      };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error ? error.message : "Unknown Gemini error",
+    };
+  }
+}
+
+
 
 
