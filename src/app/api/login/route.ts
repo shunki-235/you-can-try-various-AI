@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { timingSafeEqual } from "crypto";
 
 export async function POST(req: NextRequest) {
   const { password } = (await req.json().catch(() => ({}))) as {
@@ -8,7 +9,21 @@ export async function POST(req: NextRequest) {
 
   const appPassword = process.env.APP_PASSWORD;
 
-  if (!password || !appPassword || password !== appPassword) {
+  if (!password || !appPassword) {
+    return NextResponse.json(
+      { ok: false, message: "Invalid credentials" },
+      { status: 401 },
+    );
+  }
+
+  // タイミング攻撃を防ぐため、定数時間比較を使用
+  const passwordBuffer = Buffer.from(password);
+  const appPasswordBuffer = Buffer.from(appPassword);
+
+  if (
+    passwordBuffer.length !== appPasswordBuffer.length ||
+    !timingSafeEqual(passwordBuffer, appPasswordBuffer)
+  ) {
     return NextResponse.json(
       { ok: false, message: "Invalid credentials" },
       { status: 401 },
