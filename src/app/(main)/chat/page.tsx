@@ -7,7 +7,7 @@ import {
   DEFAULT_PROVIDER_ID,
   PROVIDERS,
 } from "@/lib/llm/providers";
-import type { ChatProvider } from "@/types/llm";
+import type { ChatMessage, ChatProvider } from "@/types/llm";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,9 +44,11 @@ export default function ChatPage() {
       id: "initial-assistant",
       role: "assistant",
       content:
-        "これはモックのチャット画面です。実際の LLM 呼び出しやストリーミングは今後の実装で追加されます。",
+        "マルチLLMチャットにようこそ。メッセージを入力して送信すると、選択したプロバイダとモデルで応答が生成されます。",
     },
   ]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const availableModels = useMemo(
     () => PROVIDERS.find((p) => p.id === provider)?.models ?? [],
@@ -69,10 +71,12 @@ export default function ChatPage() {
     setModel(next);
   };
 
-  const handleSubmit = (event?: FormEvent) => {
+  const handleSubmit = async (event?: FormEvent) => {
     event?.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed || isStreaming) return;
+
+    setErrorMessage(null);
 
     const userMessage: UiMessage = {
       id: createMessageId(),
@@ -80,14 +84,115 @@ export default function ChatPage() {
       content: trimmed,
     };
 
-    const mockAssistant: UiMessage = {
-      id: createMessageId(),
+    const assistantId = createMessageId();
+    const assistantMessage: UiMessage = {
+      id: assistantId,
       role: "assistant",
-      content: `（モック）${provider.toUpperCase()} / ${model} でのレスポンスがここに表示されます。後で実際の LLM API 呼び出しに置き換えます。`,
+      content: "",
     };
 
-    setMessages((prev) => [...prev, userMessage, mockAssistant]);
+    // 画面上のメッセージを先に更新
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInput("");
+
+    // LLM API に渡す会話履歴（初期モックメッセージは除外）
+    const historyMessages: ChatMessage[] = messages
+      .filter((message) => message.id !== "initial-assistant")
+      .map<ChatMessage>((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
+
+    const chatMessages: ChatMessage[] = [
+      ...historyMessages,
+      {
+        role: "user",
+        content: trimmed,
+      },
+    ];
+
+    try {
+      setIsStreaming(true);
+
+      const response = await fetch("/api/llm/chat/stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          provider,
+          model,
+          messages: chatMessages,
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        const fallbackText = `ストリーミングAPI呼び出しに失敗しました（status: ${response.status}）。`;
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: fallbackText,
+                }
+              : message,
+          ),
+        );
+        setErrorMessage(fallbackText);
+        setIsStreaming(false);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let accumulated = "";
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+
+        if (value) {
+          const chunkText = decoder.decode(value, { stream: !doneReading });
+          if (chunkText) {
+            accumulated += chunkText;
+            const current = accumulated;
+
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      content: current,
+                    }
+                  : message,
+              ),
+            );
+          }
+        }
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "不明なエラーが発生しました。";
+
+      const fallbackText = `エラーが発生しました: ${message}`;
+
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === assistantId
+            ? {
+                ...message,
+                content: fallbackText,
+              }
+            : message,
+        ),
+      );
+      setErrorMessage(fallbackText);
+    } finally {
+      setIsStreaming(false);
+    }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -200,17 +305,23 @@ export default function ChatPage() {
                 type="submit"
                 size="icon"
                 className="size-8 shrink-0 rounded-full"
-                disabled={!input.trim()}
+                disabled={!input.trim() || isStreaming}
               >
                 <Send className="size-4" />
                 <span className="sr-only">送信</span>
               </Button>
             </div>
           </form>
-          <div className="mt-2 text-center">
-            <span className="text-[10px] text-muted-foreground">
-              トークン使用量（モック）: ー
-            </span>
+          <div className="mt-2 text-center text-[10px] text-muted-foreground">
+            {errorMessage ? (
+              <span className="text-destructive">{errorMessage}</span>
+            ) : isStreaming ? (
+              <span>応答を生成しています...</span>
+            ) : (
+              <span>
+                トークン使用量: （Gemini の usage 情報は非ストリーミングAPIで取得予定）
+              </span>
+            )}
           </div>
         </div>
       </Card>
