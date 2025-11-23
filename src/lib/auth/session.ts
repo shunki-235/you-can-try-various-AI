@@ -66,6 +66,16 @@ function fromHex(hex: string): Uint8Array {
 }
 
 /**
+ * Uint8Array を ArrayBuffer に変換（型互換のためのユーティリティ）
+ *
+ * ランタイム上では Uint8Array の buffer は ArrayBuffer なので、そのまま使用しつつ
+ * TypeScript の型定義との差分を吸収する。
+ */
+function toArrayBuffer(view: Uint8Array): ArrayBuffer {
+  return view.buffer as ArrayBuffer;
+}
+
+/**
  * トークンに署名を追加
  */
 async function signToken(payload: string): Promise<string> {
@@ -98,12 +108,10 @@ async function verifyToken(token: string): Promise<boolean> {
     // 16進文字列をデコード
     const signatureBytes = fromHex(signatureHex);
 
-    return await crypto.subtle.verify(
-      "HMAC",
-      key,
-      signatureBytes as unknown as ArrayBuffer,
-      data
-    );
+    const signatureBuffer = toArrayBuffer(signatureBytes);
+    const dataBuffer = toArrayBuffer(data);
+
+    return await crypto.subtle.verify("HMAC", key, signatureBuffer, dataBuffer);
   } catch {
     // デコードエラーや検証エラーが発生した場合は無効なトークンとして扱う
     return false;
