@@ -1,17 +1,12 @@
-import { FlatCompat } from "@eslint/eslintrc";
-import { fileURLToPath } from "node:url";
-import { dirname } from "node:path";
-import nextConfig from "eslint-config-next";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+import js from "@eslint/js";
+import nextPlugin from "@next/eslint-plugin-next";
 
 export default [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  // ベースのJavaScript推奨ルール
+  js.configs.recommended,
+  // Next.js 向けの Core Web Vitals ルール（Flat Config）
+  nextPlugin.configs["core-web-vitals"],
+  // プロジェクト固有の除外設定
   {
     ignores: [
       ".next/**",
