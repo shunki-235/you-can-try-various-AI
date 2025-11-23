@@ -1,183 +1,70 @@
 /**
- * Edge Runtime対応のセッショントークン管理
- * Web Crypto APIを使用してHMAC署名付きトークンを生成・検証
- */
-
-// セッション有効期限（12時間）
-const SESSION_MAX_AGE_MS = 60 * 60 * 12 * 1000;
-
-/**
- * 署名キーを取得（環境変数から、なければAPP_PASSWORDを使用）
- */
-async function getSigningKey(): Promise<CryptoKey> {
-  const secret = process.env.SESSION_SECRET || process.env.APP_PASSWORD;
-
-  if (!secret) {
-    throw new Error(
-      "SESSION_SECRET or APP_PASSWORD environment variable is required for secure session management"
-    );
-  }
-
-  // Web Crypto APIでHMACキーを生成
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-
-  return await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"]
-  );
-}
-
-/**
- * ArrayBuffer / Uint8Array を 16進文字列に変換（Edge / Node 両対応）
- */
-function toHex(bytes: ArrayBuffer | Uint8Array): string {
-  const array = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
-  let hex = "";
-  for (let i = 0; i < array.length; i++) {
-    hex += array[i].toString(16).padStart(2, "0");
-  }
-  return hex;
-}
-
-/**
- * 16進文字列を Uint8Array に変換（Edge / Node 両対応）
- */
-function fromHex(hex: string): Uint8Array {
-  if (hex.length % 2 !== 0) {
-    throw new Error("Invalid hex string");
-  }
-
-  // 16進数以外の文字が含まれていないか事前に検証
-  if (!/^[0-9a-fA-F]+$/.test(hex)) {
-    throw new Error("Invalid hex string");
-  }
-
-  const length = hex.length / 2;
-  const bytes = new Uint8Array(length);
-
-  for (let i = 0; i < length; i++) {
-    const byte = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-    if (Number.isNaN(byte)) {
-      throw new Error("Invalid hex string");
-    }
-    bytes[i] = byte;
-  }
-
-  return bytes;
-}
-
-/**
- * Uint8Array を ArrayBuffer に変換（型互換のためのユーティリティ）
+ * シンプルなセッション管理
  *
- * ランタイム上では Uint8Array の buffer は ArrayBuffer なので、そのまま使用しつつ
- * TypeScript の型定義との差分を吸収する。
+ * - 共通パスワード方式前提のため、暗号学的な署名は行わない
+ * - Edge Runtime / Node Runtime の両方で動作することを優先
  */
-function toArrayBuffer(view: Uint8Array): ArrayBuffer {
-  return view.buffer as ArrayBuffer;
-}
 
-/**
- * トークンに署名を追加
- */
-async function signToken(payload: string): Promise<string> {
-  const key = await getSigningKey();
-  const encoder = new TextEncoder();
-  const data = encoder.encode(payload);
-  const signature = await crypto.subtle.sign("HMAC", key, data);
+// セッション有効期限（秒） 12時間
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 
-  // URL-safe な 16進文字列として署名をエンコード
-  const signatureHex = toHex(signature);
-
-  return `${payload}.${signatureHex}`;
-}
-
-/**
- * トークンの署名を検証
- */
-async function verifyToken(token: string): Promise<boolean> {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 2) {
-      return false;
-    }
-
-    const [payload, signatureHex] = parts;
-    const key = await getSigningKey();
-    const encoder = new TextEncoder();
-    const data = encoder.encode(payload);
-
-    // 16進文字列をデコード
-    const signatureBytes = fromHex(signatureHex);
-
-    const signatureBuffer = toArrayBuffer(signatureBytes);
-    const dataBuffer = toArrayBuffer(data);
-
-    return await crypto.subtle.verify("HMAC", key, signatureBuffer, dataBuffer);
-  } catch {
-    // デコードエラーや検証エラーが発生した場合は無効なトークンとして扱う
-    return false;
+function getAppPassword(): string | null {
+  const password = process.env.APP_PASSWORD;
+  if (!password || password.length === 0) {
+    return null;
   }
+  return password;
 }
 
 /**
  * 新しいセッショントークンを生成
- * 形式: {timestamp}.{signature}
+ *
+ * - 現状は APP_PASSWORD をそのままトークンとして利用する
+ * - Cookie 側で HttpOnly / Secure / maxAge により保護する前提のシンプル設計
  */
 export async function createSession(): Promise<string> {
-  const timestamp = Date.now();
-  const payload = timestamp.toString();
-  return await signToken(payload);
+  const appPassword = getAppPassword();
+  if (!appPassword) {
+    throw new Error(
+      "APP_PASSWORD environment variable is required for session management",
+    );
+  }
+  return appPassword;
 }
 
 /**
- * セッショントークンが有効かチェック（Edge Runtime対応）
+ * セッショントークンが有効かどうか判定
+ *
+ * - Cookie の値が APP_PASSWORD と一致しているかだけを確認する
  */
-export async function isValidSession(token: string | undefined): Promise<boolean> {
+export async function isValidSession(
+  token: string | undefined,
+): Promise<boolean> {
   if (!token) {
     return false;
   }
 
-  // 署名を検証
-  const isValid = await verifyToken(token);
-  if (!isValid) {
+  const appPassword = getAppPassword();
+  if (!appPassword) {
     return false;
   }
 
-  // 有効期限をチェック
-  const parts = token.split(".");
-  if (parts.length !== 2) {
-    return false;
-  }
-
-  const timestamp = parseInt(parts[0], 10);
-  if (isNaN(timestamp)) {
-    return false;
-  }
-
-  const now = Date.now();
-  if (now - timestamp > SESSION_MAX_AGE_MS) {
-    return false;
-  }
-
-  return true;
+  return token === appPassword;
 }
 
 /**
- * セッションを削除（Edge Runtimeでは不要だが、互換性のため残す）
+ * セッションを削除（現状はクッキー削除に依存するため no-op）
  */
 export function deleteSession(_token: string): void {
-  // Edge Runtimeではメモリ管理ができないため、何もしない
-  // 有効期限チェックで自動的に無効化される
+  // クッキーを削除する実装側で対応する想定のため、ここでは何もしない
 }
 
 /**
- * 期限切れセッションをクリーンアップ（Edge Runtimeでは不要）
+ * 期限切れセッションのクリーンアップ（no-op）
  */
 export function cleanupExpiredSessions(): number {
-  // Edge Runtimeではメモリ管理ができないため、0を返す
+  // サーバー側でセッション状態を保持していないため、クリーンアップ対象は存在しない
   return 0;
 }
+
+
