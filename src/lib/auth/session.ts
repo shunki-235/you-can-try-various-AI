@@ -45,7 +45,10 @@ function base64UrlEncode(bytes: ArrayBuffer): string {
  */
 function base64UrlDecode(base64: string): ArrayBuffer {
   const base64Normalized = base64.replace(/-/g, "+").replace(/_/g, "/");
-  const binary = atob(base64Normalized);
+  // Base64URLでは '=' パディングが削除されるため、復元が必要
+  const paddingLength = (4 - (base64Normalized.length % 4)) % 4;
+  const base64WithPadding = base64Normalized + "=".repeat(paddingLength);
+  const binary = atob(base64WithPadding);
   const buffer = new ArrayBuffer(binary.length);
   const bytes = new Uint8Array(buffer);
   for (let i = 0; i < binary.length; i++) {
@@ -73,20 +76,25 @@ async function signToken(payload: string): Promise<string> {
  * トークンの署名を検証
  */
 async function verifyToken(token: string): Promise<boolean> {
-  const parts = token.split(".");
-  if (parts.length !== 2) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) {
+      return false;
+    }
+
+    const [payload, signature] = parts;
+    const key = await getSigningKey();
+    const encoder = new TextEncoder();
+    const data = encoder.encode(payload);
+
+    // Base64URLデコード
+    const signatureBytes = base64UrlDecode(signature);
+
+    return await crypto.subtle.verify("HMAC", key, signatureBytes, data);
+  } catch {
+    // デコードエラーや検証エラーが発生した場合は無効なトークンとして扱う
     return false;
   }
-
-  const [payload, signature] = parts;
-  const key = await getSigningKey();
-  const encoder = new TextEncoder();
-  const data = encoder.encode(payload);
-
-  // Base64URLデコード
-  const signatureBytes = base64UrlDecode(signature);
-
-  return await crypto.subtle.verify("HMAC", key, signatureBytes, data);
 }
 
 /**
