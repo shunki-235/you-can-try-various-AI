@@ -7,7 +7,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { Bot, Send, User } from "lucide-react";
+import { Bot, Loader2, Send, User } from "lucide-react";
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROVIDER_ID,
@@ -775,9 +775,20 @@ export default function ChatPage() {
                           : "bg-muted text-foreground rounded-tl-sm"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap break-words leading-relaxed">
-                        {message.content}
-                      </p>
+                      <div className="min-h-[20px]">
+                        <p className="whitespace-pre-wrap break-words leading-relaxed">
+                          {message.content}
+                        </p>
+                        {isStreaming &&
+                          message.role === "assistant" &&
+                          message.content === "" && (
+                            <span className="flex items-center gap-1 py-2">
+                              <span className="size-1.5 animate-bounce rounded-full bg-foreground/50 [animation-delay:-0.3s]" />
+                              <span className="size-1.5 animate-bounce rounded-full bg-foreground/50 [animation-delay:-0.15s]" />
+                              <span className="size-1.5 animate-bounce rounded-full bg-foreground/50" />
+                            </span>
+                          )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -808,7 +819,11 @@ export default function ChatPage() {
                 className="size-8 shrink-0 rounded-full"
                 disabled={!input.trim() || isStreaming}
               >
-                <Send className="size-4" />
+                {isStreaming ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
                 <span className="sr-only">送信</span>
               </Button>
             </div>
